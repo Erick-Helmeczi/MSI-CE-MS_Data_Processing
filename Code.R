@@ -8,6 +8,8 @@ library("DescTools")
 library("geiger")
 library("MESS")
 library("mhsmm")
+library("xlsx")
+library("openxlsx")
 
 rm(list = ls())
 
@@ -29,8 +31,12 @@ rawdata <- readMSData(
   mode =  "onDisk"
 )
 
-min = 509.3738 - (509.3738/20000)
-max = 509.3738 + (509.3738/20000)
+Mass_df <- read.xlsx("Mass List.xlsx")
+
+for (i in 1:nrow(Mass_df)-1){
+
+min = Mass_df[i+1,2] - (Mass_df[i+1,2]/20000)
+max = Mass_df[i+1,2] + (Mass_df[i+1,2]/20000)
 
 mzrange <- cbind(min, max)
 rtrange <- cbind(100, 840)
@@ -65,8 +71,6 @@ Peaks <- findpeaks(Intensity_Vector,
                    sortstr = FALSE
 )
 
-Peaks
-
 Min_MT_Vec <- data_frame[Peaks[,3],1]
 Max_MT_Vec <- data_frame[Peaks[,4],1]
 Apex_MT_Vec <- data_frame[Peaks[,2],1]
@@ -75,7 +79,7 @@ Peak_df <- data.frame(Min = Min_MT_Vec, Max = Max_MT_Vec, Apex = Apex_MT_Vec)
 Peak_df <- Peak_df[order(Peak_df$Min),]
 Peak_df
 
-df <- data.frame(Area = "")
+Results_df <- data.frame(Area = "")
 
 for (i in 1:nrow(Peak_df)){
   Area <- auc(rtime_Vector, 
@@ -84,8 +88,12 @@ for (i in 1:nrow(Peak_df)){
               to = Peak_df[i,2],
               type = "linear",
               absolutearea = TRUE)
-  df[i,1] <- Area
+  Results_df[i,1] <- Area
 }
+
+Results_df <- cbind(Results_df, Migration_Time = Peak_df[,3]/60)
+
+Name <- Mass_df[i+1,1]
 
 geom_area_df <- data.frame()
 for (i in 1:nrow(Peak_df)){
@@ -95,7 +103,7 @@ for (i in 1:nrow(Peak_df)){
 
 ggplot(data = data_frame, aes(x = rtime_Vector/60, y = Intensity_Vector)) +
   geom_line() +
-  labs(title = "EIE m/z = 509.3738",
+  labs(title = Name,
        x = "Migration Time (Minutes)",
        y = "Ion Counts") +
   theme_bw() +
@@ -108,3 +116,12 @@ ggplot(data = data_frame, aes(x = rtime_Vector/60, y = Intensity_Vector)) +
   geom_area(data = geom_area_df, alpha = 0.5, fill = "blue") +
   theme(legend.position = "none")
 
+ggsave(filename = Name.pdf,
+       plot = last_plot())
+
+write.xlsx(Results_df,
+           file = "MSI-CE-MS_Data_Processing.xlsx",
+           sheetName = Name,
+           append = TRUE)
+
+}
