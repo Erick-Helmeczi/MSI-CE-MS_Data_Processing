@@ -5,12 +5,15 @@ library("tidyverse")
 library("pracma")
 library("dplyr")
 library("DescTools")
+library("geiger")
+library("MESS")
+library("mhsmm")
 
 rm(list = ls())
 
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
-file <- "20210425_40mM.mzML"
+file <- "20210425_10mM_60C.mzML"
 
 registerDoParallel(3) 
 register(DoparParam(), default = TRUE)
@@ -30,7 +33,7 @@ min = 509.3738 - (509.3738/20000)
 max = 509.3738 + (509.3738/20000)
 
 mzrange <- cbind(min, max)
-rtrange <- cbind(120, 600)
+rtrange <- cbind(100, 840)
 
 EIE <- chromatogram(rawdata, 
                     mz = mzrange, 
@@ -40,17 +43,22 @@ EIE <- chromatogram(rawdata,
                     msLevel = 1L)
 
 
-rtime_Vector <- unname(EIE[1]@rtime/60)
+rtime_Vector <- unname(EIE[1]@rtime)
 Intensity_Vector <- unname(EIE[1]@intensity)
 
 data_frame <- data.frame(rtime_Vector, Intensity_Vector)
-tdata_frame <- subset(data_frame, rtime_Vector >= min)
-tdata_frame <- subset(tdata_frame, rtime_Vector <= max)
+
+Smooth <- with(data_frame, 
+            ksmooth(rtime_Vector, Intensity_Vector, kernel = "box", bandwidth = 10))
+
+data_frame <- data.frame(rtime_Vector = Smooth$x, Intensity_Vector = Smooth$y)
+rtime_Vector <- data_frame$rtime_Vector
+Intensity_Vector <- data_frame$Intensity_Vector
 
 Peaks <- findpeaks(Intensity_Vector,
                    nups  = 3,
                    ndowns = 3,
-                   zero = 0,
+                   zero = "+",
                    minpeakheight = 15000,
                    minpeakdistance = 6,
                    npeaks = 6,
@@ -64,20 +72,28 @@ Max_MT_Vec <- data_frame[Peaks[,4],1]
 Apex_MT_Vec <- data_frame[Peaks[,2],1]
 
 Peak_df <- data.frame(Min = Min_MT_Vec, Max = Max_MT_Vec, Apex = Apex_MT_Vec)
-
+Peak_df <- Peak_df[order(Peak_df$Min),]
 Peak_df
 
-Total_Area <- AUC(rtime_Vector, 
-                  Intensity_Vector, 
-                  from = Peak_df[1,1], 
-                  to = Peak_df[1,2], 
-                  method = "trapezoid")
+df <- data.frame(Area = "")
 
-Baseline <- (Peak_df[1,2] - Peak_df[1,1])*data_frame[Peaks[1,3],2]
+for (i in 1:nrow(Peak_df)){
+  Area <- auc(rtime_Vector, 
+              Intensity_Vector, 
+              from = Peak_df[i,1],
+              to = Peak_df[i,2],
+              type = "linear",
+              absolutearea = TRUE)
+  df[i,1] <- Area
+}
 
-Area <- Total_Area - Baseline
+geom_area_df <- data.frame()
+for (i in 1:nrow(Peak_df)){
+  geom_area_df_temp <- data_frame %>% filter(rtime_Vector >= Peak_df[i,1], rtime_Vector <= Peak_df[i,2])
+  geom_area_df <- rbind(geom_area_df, geom_area_df_temp)
+}
 
-ggplot(data = data_frame, aes(x = rtime, y = intensity)) +
+ggplot(data = data_frame, aes(x = rtime_Vector/60, y = Intensity_Vector)) +
   geom_line() +
   labs(title = "EIE m/z = 509.3738",
        x = "Migration Time (Minutes)",
@@ -89,5 +105,6 @@ ggplot(data = data_frame, aes(x = rtime, y = intensity)) +
         text = element_text(size = 16)) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  geom_area(data = tdata_frame, alpha = 0.5, fill = "blue") +
+  geom_area(data = geom_area_df, alpha = 0.5, fill = "blue") +
   theme(legend.position = "none")
+
