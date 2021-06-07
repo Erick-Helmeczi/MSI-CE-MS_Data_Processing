@@ -8,7 +8,6 @@ library("DescTools")
 library("geiger")
 library("MESS")
 library("mhsmm")
-library("xlsx")
 library("openxlsx")
 
 rm(list = ls())
@@ -32,22 +31,27 @@ rawdata <- readMSData(
 )
 
 Mass_df <- read.xlsx("Mass List.xlsx")
-
-for (i in 1:nrow(Mass_df)-1){
-
-min = Mass_df[i+1,2] - (Mass_df[i+1,2]/20000)
-max = Mass_df[i+1,2] + (Mass_df[i+1,2]/20000)
-
-mzrange <- cbind(min, max)
-rtrange <- cbind(100, 840)
+mzr <- matrix(c(Mass_df[,2] - Mass_df[,2]/20000, Mass_df[,2] + Mass_df[,2]/20000), ncol =2)
 
 EIE <- chromatogram(rawdata, 
-                    mz = mzrange, 
-                    rt = rtrange,
+                    mz = mzr,
+                    rt = c(100,800),
                     aggregationFun = "sum",
                     missing = NA_real_,
-                    msLevel = 1L)
+                    msLevel = 1)
 
+for (i in 1:nrow(Mass_df)){
+  temp_df <- data.frame(EIE[[i]]@intensity)
+  df <- k
+}
+
+Names <- c("Time", Mass_df[,1])
+df <- data.frame(matrix(ncol = nrow(Mass_df) + 1))
+colnames(df) <- Names
+df$Time <- EIE[[1]]@rtime
+
+temp_df <- data.frame(paste0(Mass_df[1,1]) = EIE[[1]]@intensity)
+temp_df <- colnames(temp_df, Mass_df[1,1])
 
 rtime_Vector <- unname(EIE[1]@rtime)
 Intensity_Vector <- unname(EIE[1]@intensity)
@@ -124,4 +128,4 @@ write.xlsx(Results_df,
            sheetName = Name,
            append = TRUE)
 
-}
+
